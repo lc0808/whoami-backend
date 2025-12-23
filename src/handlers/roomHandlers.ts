@@ -190,9 +190,7 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
         if (room.gameState !== "waiting") {
           const playerView = GameLogic.getPlayerView(room, playerId);
           socket.emit("game-started", playerView);
-          logger.info(
-            `⚡ Resent game-started to rejoined player in ${roomId}`
-          );
+          logger.info(`⚡ Resent game-started to rejoined player in ${roomId}`);
         }
 
         io.to(roomId).emit("room-updated", room);
