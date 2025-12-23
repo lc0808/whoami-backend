@@ -18,14 +18,10 @@ const pendingDisconnects = new Map<string, PendingDisconnect>();
 const MAX_PENDING_DISCONNECTS = 1000;
 const RECONNECT_GRACE_PERIOD_MS = 10000;
 
-/**
- * Safely adds a pending disconnect entry with cleanup of old entries
- */
 function addPendingDisconnect(
   socketId: string,
   disconnect: PendingDisconnect
 ): void {
-  // Cleanup old entries if map is getting too large
   if (pendingDisconnects.size >= MAX_PENDING_DISCONNECTS) {
     const firstKey = pendingDisconnects.keys().next().value;
     if (firstKey) {
@@ -40,14 +36,10 @@ function addPendingDisconnect(
   pendingDisconnects.set(socketId, disconnect);
 }
 
-/**
- * Sets up room-related Socket.io event handlers
- */
 export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
   io.on("connection", (socket: Socket) => {
     logger.socket(`Client connected: ${socket.id}`);
 
-    // Handle reconnection within grace period
     const pending = pendingDisconnects.get(socket.id);
     if (pending) {
       clearTimeout(pending.timeout);
@@ -55,9 +47,6 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
       logger.socket(`⚡ Reconnected within grace period: ${socket.id}`);
     }
 
-    /**
-     * Create a new game room
-     */
     socket.on("create-room", (playerName, gameMode, presetCategory) => {
       try {
         if (!isValidPlayerName(playerName)) {
@@ -143,9 +132,6 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
       }
     });
 
-    /**
-     * Rejoin a room after temporary disconnect
-     */
     socket.on("rejoin-room", (data: { roomId: string; playerId: string }) => {
       try {
         const { roomId, playerId } = data;
@@ -171,7 +157,6 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
         player.socketId = socket.id;
         socket.join(roomId);
 
-        // Clean up pending disconnect
         if (oldSocketId && pendingDisconnects.has(oldSocketId)) {
           const pending = pendingDisconnects.get(oldSocketId);
           if (pending) {
@@ -186,7 +171,6 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
 
         socket.emit("room-updated", room);
 
-        // Resend game state if game already started
         if (room.gameState !== "waiting") {
           const playerView = GameLogic.getPlayerView(room, playerId);
           socket.emit("game-started", playerView);
@@ -200,9 +184,6 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
       }
     });
 
-    /**
-     * Leave a game room
-     */
     socket.on("leave-room", (roomId) => {
       try {
         if (!isValidRoomId(roomId)) {
@@ -237,9 +218,6 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
       }
     });
 
-    /**
-     * Handle client disconnect with grace period for reconnection
-     */
     socket.on("disconnect", () => {
       logger.socket(`Client disconnected: ${socket.id}`);
 

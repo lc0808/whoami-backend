@@ -44,12 +44,10 @@ export class GameLogic {
     fromPlayerId: string,
     toPlayerId: string
   ): boolean {
-    // Cannot assign to self
     if (fromPlayerId === toPlayerId) {
       return false;
     }
 
-    // Check both players exist
     const playerExists = room.players.some((p) => p.id === fromPlayerId);
     if (!playerExists) {
       return false;
@@ -67,7 +65,6 @@ export class GameLogic {
       }
     }
 
-    // Target cannot already have assignment
     const alreadyAssigned = room.assignments.some(
       (a) => a.playerId === toPlayerId
     );
@@ -75,7 +72,6 @@ export class GameLogic {
       return false;
     }
 
-    // Player cannot assign more than once
     const playerAlreadyAssigned = room.assignments.some(
       (a) => "assignedBy" in a && a.assignedBy === fromPlayerId
     );
