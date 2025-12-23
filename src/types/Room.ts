@@ -12,6 +12,7 @@ export interface Room {
   presetCategory?: PresetCategory;
   gameState: GameState;
   assignments: PlayerAssignment[];
+  pairings?: { [playerId: string]: string };
   roundNumber: number;
   createdAt: Date;
 }

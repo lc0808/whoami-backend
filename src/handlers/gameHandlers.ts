@@ -6,15 +6,8 @@ import {
   isValidCharacterAssignment,
 } from "../utils/validators.js";
 import { logger } from "../utils/logger.js";
-
-/**
- * Sets up game-related Socket.io event handlers
- */
 export function setupGameHandlers(io: Server, roomManager: RoomManager) {
   io.on("connection", (socket: Socket) => {
-    /**
-     * Start the game (owner only)
-     */
     socket.on("start-game", (roomId) => {
       try {
         if (!isValidRoomId(roomId)) {
@@ -39,19 +32,17 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
           return;
         }
 
-        // Assign items for preset mode
         if (room.gameMode === "preset") {
           GameLogic.assignPresetItems(room);
           room.gameState = "playing";
         } else {
-          // Custom mode requires manual assignment phase
+          GameLogic.initializeCustomModePairings(room);
           room.gameState = "assigning";
         }
 
         roomManager.updateRoom(roomId, room);
         logger.game(`Game started in room ${roomId}`);
 
-        // Send personalized game view to each player
         for (const p of room.players) {
           io.to(p.socketId).emit(
             "game-started",
@@ -64,9 +55,6 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
       }
     });
 
-    /**
-     * Assign a character to a player (custom mode only)
-     */
     socket.on("assign-character", (roomId, targetPlayerId, character) => {
       try {
         if (!isValidRoomId(roomId)) {
@@ -108,7 +96,6 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
           return;
         }
 
-        // Add assignment
         room.assignments.push({
           playerId: targetPlayerId,
           assignedItem: character,
@@ -123,7 +110,6 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
 
         io.to(roomId).emit("room-updated", room);
 
-        // Start game once all players assigned
         if (GameLogic.allPlayersAssigned(room)) {
           room.gameState = "playing";
           roomManager.updateRoom(roomId, room);
@@ -143,9 +129,6 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
       }
     });
 
-    /**
-     * End current round
-     */
     socket.on("end-round", (data, callback) => {
       try {
         const { roomId } = data;
@@ -177,9 +160,6 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
       }
     });
 
-    /**
-     * Start a new round (owner only)
-     */
     socket.on("start-new-round", (roomId) => {
       try {
         if (!isValidRoomId(roomId)) {
@@ -199,7 +179,6 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
           return;
         }
 
-        // Reset for new round
         room.roundNumber += 1;
         room.assignments = [];
         room.gameState = "waiting";

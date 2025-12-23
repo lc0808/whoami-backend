@@ -1,10 +1,11 @@
 import { Room } from "../types/index.js";
 import { getPresetByCategory } from "../data/presetManager.js";
 import { selectRandomItems, shuffleArray } from "../utils/randomizer.js";
+import {
+  generatePlayerPairings,
+  validatePairings,
+} from "../utils/playerPairing.js";
 
-/**
- * Game logic and validation rules
- */
 export class GameLogic {
   /**
    * Assigns random preset items to all players
@@ -59,6 +60,13 @@ export class GameLogic {
       return false;
     }
 
+    if (room.pairings) {
+      const pairedTarget = room.pairings[fromPlayerId];
+      if (toPlayerId !== pairedTarget) {
+        return false;
+      }
+    }
+
     // Target cannot already have assignment
     const alreadyAssigned = room.assignments.some(
       (a) => a.playerId === toPlayerId
@@ -76,6 +84,27 @@ export class GameLogic {
     }
 
     return true;
+  }
+
+  /**
+   * Generates and validates pairings for custom mode
+   * @param room - The game room
+   * @throws Error if pairings invalid or too few players
+   */
+  static initializeCustomModePairings(room: Room): void {
+    const playerIds = room.players.map((p) => p.id);
+
+    if (playerIds.length < 2) {
+      throw new Error("Need at least 2 players for custom mode");
+    }
+
+    const pairings = generatePlayerPairings(playerIds);
+
+    if (!validatePairings(pairings, playerIds)) {
+      throw new Error("Failed to generate valid pairings");
+    }
+
+    room.pairings = pairings;
   }
 
   /**
@@ -97,6 +126,7 @@ export class GameLogic {
       gameMode: room.gameMode,
       currentRound: room.roundNumber,
       gameState: room.gameState,
+      pairings: room.gameMode === "custom" ? room.pairings : undefined,
       players: room.players.map((player) => ({
         id: player.id,
         name: player.name,
