@@ -16,6 +16,7 @@ interface PendingDisconnect {
 
 const pendingDisconnects = new Map<string, PendingDisconnect>();
 const MAX_PENDING_DISCONNECTS = 1000;
+const MAX_PLAYERS = 20;
 const RECONNECT_GRACE_PERIOD_MS = Number(
   process.env.RECONNECT_GRACE_PERIOD_MS ?? 60000
 );
@@ -129,6 +130,11 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
 
         if (room.gameState !== "waiting") {
           socket.emit("error", "Game already started");
+          return;
+        }
+
+        if (room.players.length >= MAX_PLAYERS) {
+          socket.emit("error", `Room is full (max ${MAX_PLAYERS} players)`);
           return;
         }
 
