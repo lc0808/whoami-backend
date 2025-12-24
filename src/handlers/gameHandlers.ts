@@ -5,6 +5,7 @@ import {
   isValidRoomId,
   isValidCharacterAssignment,
 } from "../utils/validators.js";
+import { findPlayerBySocketId } from "../utils/playerValidation.js";
 import { logger } from "../utils/logger.js";
 export function setupGameHandlers(io: Server, roomManager: RoomManager) {
   io.on("connection", (socket: Socket) => {
@@ -21,8 +22,13 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
           return;
         }
 
-        const player = room.players.find((p) => p.socketId === socket.id);
-        if (!player || room.ownerId !== player.id) {
+        const player = findPlayerBySocketId(room, socket.id);
+        if (!player) {
+          socket.emit("error", "Player not in room");
+          return;
+        }
+
+        if (room.ownerId !== player.id) {
           socket.emit("error", "Only room owner can start game");
           return;
         }
@@ -81,11 +87,19 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
           return;
         }
 
-        const assigningPlayer = room.players.find(
-          (p) => p.socketId === socket.id
-        );
+        if (room.gameState !== "assigning") {
+          socket.emit("error", "Game is not in assignment phase");
+          return;
+        }
+
+        const assigningPlayer = findPlayerBySocketId(room, socket.id);
         if (!assigningPlayer) {
           socket.emit("error", "Player not in room");
+          return;
+        }
+
+        if (!room.players.find((p) => p.id === targetPlayerId)) {
+          socket.emit("error", "Target player not in room");
           return;
         }
 
@@ -142,6 +156,11 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
           return callback({ error: "Room not found" });
         }
 
+        const player = findPlayerBySocketId(room, socket.id);
+        if (!player) {
+          return callback({ error: "Player not in room" });
+        }
+
         if (room.gameState !== "playing") {
           return callback({ error: "Game not in progress" });
         }
@@ -173,8 +192,13 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
           return;
         }
 
-        const player = room.players.find((p) => p.socketId === socket.id);
-        if (!player || room.ownerId !== player.id) {
+        const player = findPlayerBySocketId(room, socket.id);
+        if (!player) {
+          socket.emit("error", "Player not in room");
+          return;
+        }
+
+        if (room.ownerId !== player.id) {
           socket.emit("error", "Only room owner can start new round");
           return;
         }
@@ -192,6 +216,46 @@ export function setupGameHandlers(io: Server, roomManager: RoomManager) {
       } catch (error) {
         logger.error(`Failed to start new round: ${error}`);
         socket.emit("error", "Failed to start new round");
+      }
+    });
+
+    socket.on("sync-room", (roomId, callback) => {
+      try {
+        if (!isValidRoomId(roomId)) {
+          return callback({
+            isSynced: false,
+            error: "Invalid room code",
+          });
+        }
+
+        const room = roomManager.getRoom(roomId);
+        if (!room) {
+          return callback({
+            isSynced: false,
+            error: "Room not found",
+          });
+        }
+
+        const player = findPlayerBySocketId(room, socket.id);
+
+        if (!player) {
+          logger.info(`ℹ️ Sync request for room ${roomId} but no player found`);
+          return callback({
+            isSynced: false,
+            error: "Player not in room",
+            room,
+          });
+        }
+
+        logger.info(`✅ Room sync OK for player ${player.name} in ${roomId}`);
+        callback({
+          isSynced: true,
+          room,
+          playerId: player.id,
+        });
+      } catch (error) {
+        logger.error(`Failed to sync room: ${error}`);
+        callback({ isSynced: false, error: "Failed to sync" });
       }
     });
   });

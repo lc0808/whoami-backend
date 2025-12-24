@@ -16,7 +16,9 @@ interface PendingDisconnect {
 
 const pendingDisconnects = new Map<string, PendingDisconnect>();
 const MAX_PENDING_DISCONNECTS = 1000;
-const RECONNECT_GRACE_PERIOD_MS = 10000;
+const RECONNECT_GRACE_PERIOD_MS = Number(
+  process.env.RECONNECT_GRACE_PERIOD_MS ?? 60000
+);
 
 function addPendingDisconnect(
   socketId: string,
@@ -40,12 +42,31 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
   io.on("connection", (socket: Socket) => {
     logger.socket(`Client connected: ${socket.id}`);
 
-    const pending = pendingDisconnects.get(socket.id);
-    if (pending) {
-      clearTimeout(pending.timeout);
-      pendingDisconnects.delete(socket.id);
-      logger.socket(`⚡ Reconnected within grace period: ${socket.id}`);
-    }
+    const checkAndClearPending = () => {
+      const keysToDelete: string[] = [];
+
+      for (const [oldSocketId, pending] of pendingDisconnects) {
+        const room = roomManager.getRoom(pending.roomId);
+        if (!room) {
+          keysToDelete.push(oldSocketId);
+          clearTimeout(pending.timeout);
+          continue;
+        }
+
+        const player = room.players.find((p) => p.id === pending.playerId);
+        if (!player) {
+          keysToDelete.push(oldSocketId);
+          clearTimeout(pending.timeout);
+          continue;
+        }
+      }
+
+      for (const key of keysToDelete) {
+        pendingDisconnects.delete(key);
+      }
+    };
+
+    checkAndClearPending();
 
     socket.on("create-room", (playerName, gameMode, presetCategory) => {
       try {
@@ -88,9 +109,6 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
       }
     });
 
-    /**
-     * Join an existing game room
-     */
     socket.on("join-room", (roomId, playerName) => {
       try {
         if (!isValidRoomId(roomId)) {
@@ -199,7 +217,33 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
 
         const player = room.players.find((p) => p.socketId === socket.id);
         if (!player) {
-          socket.emit("error", "Player not in room");
+          socket.leave(roomId);
+          logger.socket(
+            `Player with socket ${socket.id} not found in room ${roomId}`
+          );
+          return;
+        }
+
+        if (room.gameState === "assigning") {
+          logger.player(
+            `⚠️ Player ${player.name} left during assignment - removing and ending round`
+          );
+
+          roomManager.removePlayer(roomId, player.id);
+          socket.leave(roomId);
+
+          const updatedRoom = roomManager.getRoom(room.id);
+          if (updatedRoom) {
+            updatedRoom.gameState = "finished";
+            roomManager.updateRoom(room.id, updatedRoom);
+            io.to(room.id).emit("player-left", updatedRoom);
+            io.to(room.id).emit("round-ended", updatedRoom);
+            io.to(room.id).emit("info", {
+              message: `${player.name} saiu durante a atribuição. Round encerrado.`,
+              reason: "player-left-during-assignment",
+            });
+          }
+
           return;
         }
 
@@ -225,6 +269,51 @@ export function setupRoomHandlers(io: Server, roomManager: RoomManager) {
       for (const room of rooms) {
         const player = room.players.find((p) => p.socketId === socket.id);
         if (!player) continue;
+
+        const gameState = room.gameState;
+
+        if (gameState === "assigning") {
+          logger.player(
+            `⚠️ Player ${player.name} disconnected during assignment - removing and ending round`
+          );
+
+          roomManager.removePlayer(room.id, player.id);
+
+          const updatedRoom = roomManager.getRoom(room.id);
+          if (updatedRoom) {
+            updatedRoom.gameState = "finished";
+            roomManager.updateRoom(room.id, updatedRoom);
+
+            io.to(room.id).emit("player-left", updatedRoom);
+            // Then broadcast round ended
+            io.to(room.id).emit("round-ended", updatedRoom);
+            io.to(room.id).emit("info", {
+              message: `${player.name} desconectou durante a atribuição. Round encerrado.`,
+              reason: "player-disconnected-during-assignment",
+            });
+          }
+
+          continue;
+        }
+
+        const shouldWaitForReconnect =
+          gameState === "waiting" || gameState === "playing";
+
+        if (!shouldWaitForReconnect) {
+          try {
+            roomManager.removePlayer(room.id, player.id);
+            const updatedRoom = roomManager.getRoom(room.id);
+            if (updatedRoom) {
+              io.to(room.id).emit("player-left", updatedRoom);
+            }
+            logger.player(
+              `Player ${player.name} removed from finished game in ${room.id}`
+            );
+          } catch (error) {
+            logger.error(`Error removing finished-game player: ${error}`);
+          }
+          continue;
+        }
 
         const timeoutId = setTimeout(() => {
           logger.player(
