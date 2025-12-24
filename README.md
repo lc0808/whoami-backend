@@ -481,14 +481,14 @@ Enable verbose logging by checking console output. All events are logged with em
 - **ESLint**: Code quality
 - **Prettier**: Code formatting
 
-## � Author
+## 👤 Author
 
-Lucas Carvalho
+**Lucas Carvalho**
 
-Portfolio: [under construction]
-LinkedIn: linkedin.com/in/lucas-carvalho-32aa70227
-GitHub: @lc0808
-Email: lucasvieirac.dev@gmail.com
+- Portfolio: [under construction]
+- LinkedIn: [linkedin.com/in/lucas-carvalho-32aa70227](https://linkedin.com/in/lucas-carvalho-32aa70227)
+- GitHub: [@lc0808](https://github.com/lc0808)
+- Email: lucasvieirac.dev@gmail.com
 
 ## 📄 License
 
