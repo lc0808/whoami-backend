@@ -9,6 +9,17 @@ import { findPlayerBySocketId } from "../utils/playerValidation.js";
 import { logger } from "../utils/logger.js";
 export function setupGameHandlers(io: Server, roomManager: RoomManager) {
   io.on("connection", (socket: Socket) => {
+    socket.on("ping", (callback) => {
+      try {
+        logger.info(`Ping received from ${socket.id}`);
+        if (typeof callback === "function") {
+          callback({ ok: true, timestamp: Date.now() });
+        }
+      } catch (error) {
+        logger.error(`Failed to handle ping: ${error}`);
+      }
+    });
+
     socket.on("start-game", (roomId) => {
       try {
         if (!isValidRoomId(roomId)) {
